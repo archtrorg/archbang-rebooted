@@ -89,7 +89,7 @@
 			<action name="Execute"><command>geany ~/.config/gtk-3.0/settings.ini</command></action>
 		</item>
 		<item label="oblogout.conf">
-			<action name="Execute"><command>gksudo geany -m /etc/oblogout.conf</command></action>
+			<action name="Execute"><command>gksudo geany /etc/oblogout.conf</command></action>
 		</item>
 		<item label="tint2rc">
 			<action name="Execute"><command>geany -m ~/.config/tint2/tint2rc</command></action>

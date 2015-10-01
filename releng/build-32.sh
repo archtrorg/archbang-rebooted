@@ -2,7 +2,7 @@
 
 set -e -u
 
-iso_name=architect-rebooted
+iso_name=archbang-rebooted
 iso_label="archbang-rebooted-$(date +%Y%m)-32bit"
 iso_version=$(date +%Y.%m.%d)
 install_dir=arch
