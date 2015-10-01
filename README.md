@@ -1,6 +1,0 @@
-Archbang. Rebooted.
--------------------
-
-Special edition.
-
-
