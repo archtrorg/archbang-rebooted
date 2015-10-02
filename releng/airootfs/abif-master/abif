@@ -1,6 +1,6 @@
 # !/bin/bash
 #
-# Arch Base Installation Framework (version 1.3 - 01-Oct-2015)
+# Arch Base Installation Framework (version 1.2 - 01-Oct-2015)
 #
 # Written by Carl Duff for ArchBang Linux
 #
@@ -18,7 +18,7 @@
 # ISO Specific Variables
 ISO_HOST="archbang"                           		# ISO Host Name
 ISO_USER="ablive"           						# Live user account
-VERSION="ArchBang Installation Framework 2.3"		# Installer Name / Version
+VERSION="ArchBang Installation Framework 2.2"		# Installer Name / Version
 TRANS_SRC="/abif-master/"							# Dir where translation files are stored
 
 # Create a temporary file to store menu selections
@@ -96,7 +96,7 @@ select_language() {
     sed -i "s/#${CURR_LOCALE}/${CURR_LOCALE}/" /etc/locale.gen
     locale-gen >/dev/null 2>&1
     export LANG=${CURR_LOCALE}
-    [[ $FONT != "" ]] && setfont $FONT
+    #[[ $FONT != "" ]] && setfont $FONT
 }
 
 # Check user is root, then id system parameters
@@ -298,7 +298,7 @@ generate_fstab() {
              ;;
         "2") genfstab -L -p ${MOUNTPOINT} >> ${MOUNTPOINT}/etc/fstab 2>/tmp/.errlog
              ;;
-        "3") if [[ $UEFI -eq 1 ]]; then
+        "3") if [[ $SYSTEM == "UEFI" ]]; then
                 genfstab -t PARTUUID -p ${MOUNTPOINT} >> ${MOUNTPOINT}/etc/fstab 2>/tmp/.errlog
              else 
                 genfstab -U -p ${MOUNTPOINT} >> ${MOUNTPOINT}/etc/fstab 2>/tmp/.errlog
@@ -317,7 +317,7 @@ generate_fstab() {
 # Set the installed system's hostname
 set_hostname() {
 
-   dialog --backtitle "$VERSION - $SYSTEM ($ARCHI)" --title "$_HostNameTitle" --inputbox "$_HostNameBody" 0 0 "arch" 2>${ANSWER} || config_base_menu
+   dialog --backtitle "$VERSION - $SYSTEM ($ARCHI)" --title "$_HostNameTitle" --inputbox "$_HostNameBody" 0 0 "archbang" 2>${ANSWER} || config_base_menu
    HOST_NAME=$(cat ${ANSWER})
 
    echo "$HOST_NAME" > ${MOUNTPOINT}/etc/hostname
@@ -623,12 +623,12 @@ find_partitions() {
     done
     
     # Deal with incorrect partitioning
-    if [[ $NUMBER_PARTITIONS -lt 2 ]] && [[ $UEFI -eq 1 ]]; then
+    if [[ $NUMBER_PARTITIONS -lt 2 ]] && [[ $SYSTEM == "UEFI" ]]; then
         dialog --backtitle "$VERSION - $SYSTEM ($ARCHI)" --title "$_UefiPartErrTitle" --msgbox "$_UefiPartErrBody" 0 0
         create_partitions
     fi
     
-    if [[ $NUMBER_PARTITIONS -eq 0 ]] && [[ $UEFI -eq 0 ]]; then
+    if [[ $NUMBER_PARTITIONS -eq 0 ]] && [[ $SYSTEM == "BIOS" ]]; then
         dialog --backtitle "$VERSION - $SYSTEM ($ARCHI)" --title "$_BiosPartErrTitle" --msgbox "$_BiosPartErrBody" 0 0	
         create_partitions
     fi
@@ -957,7 +957,7 @@ btrfs_mount_opts() {
 	            check_for_error
 	            
                 # Don't give /boot as an example for UEFI systems!
-                if [[ $UEFI -eq 1 ]]; then
+                if [[ $SYSTEM == "UEFI" ]]; then
                    dialog --backtitle "$VERSION - $SYSTEM ($ARCHI)" --title "$_ExtNameTitle $PARTITON " --inputbox "$_ExtNameBodyUefi" 0 0 "/" 2>${ANSWER} || config_base_menu
                 else
                    dialog --backtitle "$VERSION - $SYSTEM ($ARCHI)" --title "$_ExtNameTitle $PARTITON " --inputbox "$_ExtNameBodyBios" 0 0 "/" 2>${ANSWER} || config_base_menu
@@ -969,7 +969,7 @@ btrfs_mount_opts() {
                       dialog --backtitle "$VERSION - $SYSTEM ($ARCHI)" --title "$_ExtErrTitle" --msgbox "$_ExtErrBody" 0 0
                       
                       # Don't give /boot as an example for UEFI systems!
-                      if [[ $UEFI -eq 1 ]]; then
+                      if [[ $SYSTEM == "UEFI" ]]; then
                          dialog --backtitle "$VERSION - $SYSTEM ($ARCHI)" --title "$_ExtNameTitle $PARTITON " --inputbox "$_ExtNameBodyUefi" 0 0 "/" 2>${ANSWER} || config_base_menu
                       else
                          dialog --backtitle "$VERSION - $SYSTEM ($ARCHI)" --title "$_ExtNameTitle $PARTITON " --inputbox "$_ExtNameBodyBios" 0 0 "/" 2>${ANSWER} || config_base_menu
@@ -1392,7 +1392,8 @@ bios_bootloader() {
                 sed -i "s/APPEND.*/APPEND root=\/dev\/mapper\/${ROOT_PART} rw/g" ${MOUNTPOINT}/boot/syslinux/syslinux.cfg
              fi
              
-             # Amend configuration if btrfs subvolume as root
+             # Amend configuration file for LTS kernel and/or btrfs subvolume as root
+             [[ $LTS -eq 1 ]] && sed -i 's/linux/linux-lts/g' ${MOUNTPOINT}/boot/syslinux/syslinux.cfg
              [[ $BTRFS_MNT != "" ]] && sed -i "s/rw/rw $BTRFS_MNT/g" ${MOUNTPOINT}/boot/syslinux/syslinux.cfg
              
              BOOTLOADER="Syslinux"
@@ -1474,13 +1475,20 @@ uefi_bootloader() {
              sysdb_root="/dev/mapper/${ROOT_PART}" 
           fi
           
+          # Deal with LTS Kernel
+          if [[ $LTS -eq 1 ]]; then
+            echo -e "title\tArchbang Linux\nlinux\t/vmlinuz-linux-lts\ninitrd\t/initramfs-linux-lts.img\noptions\troot=PARTUUID=${sysdb_root} rw" > ${MOUNTPOINT}${UEFI_MOUNT}/loader/entries/archbang.conf
+          else
+            echo -e "title\tArchbang Linux\nlinux\t/vmlinuz-linux\ninitrd\t/initramfs-linux.img\noptions\troot=PARTUUID=${sysdb_root} rw" > ${MOUNTPOINT}${UEFI_MOUNT}/loader/entries/archbang.conf
+          fi
+          
           # Fix LVM Root installations, and deal with btrfs root subvolume mounting
           [[ $LVM_ROOT -eq 1 ]] && sed -i "s/PARTUUID=//g" ${MOUNTPOINT}/boot/loader/entries/arch.conf
           [[ $BTRFS_MNT != "" ]] && sed -i "s/rw/rw $BTRFS_MNT/g" ${MOUNTPOINT}/boot/loader/entries/arch.conf
           
           BOOTLOADER="systemd-boot"
           # Set the loader file  
-          echo -e "default  arch\ntimeout  5" > ${MOUNTPOINT}${UEFI_MOUNT}/loader/loader.conf 2>/tmp/.errlog
+          echo -e "default  archbang\ntimeout  5" > ${MOUNTPOINT}${UEFI_MOUNT}/loader/loader.conf 2>/tmp/.errlog
           check_for_error
           ;;
           
@@ -1494,7 +1502,7 @@ uefi_bootloader() {
     arch_chroot "PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/core_perl" 2>/tmp/.errlog
     check_for_error
 
-    if [[ $UEFI -eq 0 ]]; then
+    if [[ $SYSTEM == "BIOS" ]]; then
        bios_bootloader
     else
        uefi_bootloader
@@ -1694,7 +1702,7 @@ edit_configs() {
                            ;;
                "Syslinux") FILE="${MOUNTPOINT}/boot/syslinux/syslinux.cfg"
                            ;;
-           "systemd-boot") FILE="${MOUNTPOINT}${UEFI_MOUNT}/loader/entries/arch.conf" 
+           "systemd-boot") FILE="${MOUNTPOINT}${UEFI_MOUNT}/loader/entries/archbang.conf" 
                            FILE2="${MOUNTPOINT}${UEFI_MOUNT}/loader/loader.conf"
                            ;;
                  "rEFInd") [[ -e ${MOUNTPOINT}${UEFI_MOUNT}/EFI/refind/refind.conf ]] \
